@@ -23,6 +23,26 @@ def load_wave_data(audio_dir, file_name):
     return x, fs
 
 
+# data augmentation: add white noise
+def add_white_noise(x, rate=0.002):
+    return x + rate*np.random.randn(len(x))
+
+
+# data augmentation: shift sound in time frame
+def shift_sound(x, rate=2):
+    return np.roll(x, int(len(x)//rate))
+
+
+# data augmentation: stretch sound
+def stretch_sound(x, rate=1.1):
+    input_length = len(x)
+    x = librosa.effects.time_stretch(x, rate)
+    if len(x) > input_length:
+        return x[:input_length]
+    else:
+        return np.pad(x, (0, max(0, input_length - len(x))), "constant")
+
+
 # change wave data to mel-stft
 def calculate_melsp(x, n_fft=1024, hop_length=128):
     stft = np.abs(librosa.stft(x, n_fft=n_fft, hop_length=hop_length)) ** 2
@@ -69,4 +89,25 @@ def main():
     print("wave size:{0}\nmelsp size:{1}\nsamping rate:{2}".format(
         x.shape, melsp.shape, fs))
     show_wave(x)
+    show_melsp(melsp, fs)
+
+    x_wn = add_white_noise(x)
+    melsp = calculate_melsp(x_wn)
+    print("wave size:{0}\nmelsp size:{1}\nsamping rate:{2}".format(
+        x_wn.shape, melsp.shape, fs))
+    show_wave(x_wn)
+    show_melsp(melsp, fs)
+
+    x_ss = shift_sound(x)
+    melsp = calculate_melsp(x_ss)
+    print("wave size:{0}\nmelsp size:{1}\nsamping rate:{2}".format(
+        x_ss.shape, melsp.shape, fs))
+    show_wave(x_ss)
+    show_melsp(melsp, fs)
+
+    x_st = stretch_sound(x)
+    melsp = calculate_melsp(x_st)
+    print("wave size:{0}\nmelsp size:{1}\nsamping rate:{2}".format(
+        x_st.shape, melsp.shape, fs))
+    show_wave(x_st)
     show_melsp(melsp, fs)

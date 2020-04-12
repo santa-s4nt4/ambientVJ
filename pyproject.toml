@@ -22,3 +22,4 @@ flake8 = "^3.7.9"
 [tool.poetry.scripts]
 ambientVJ = "ambientVJ:main"
 model = "model:main"
+learn = "learn:main"

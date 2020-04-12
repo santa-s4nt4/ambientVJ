@@ -64,6 +64,24 @@ def show_melsp(melsp, fs):
     plt.show()
 
 
+freq = 128
+time = 1723
+
+
+# save wave data in npz, with augmentation
+def save_np_data(filename, x, y, aug=None, rates=None):
+    np_data = np.zeros(freq * time * len(x)).reshape(len(x), freq, time)
+    np_targets = np.zeros(len(y))
+    for i in range(len(y)):
+        _x, fs = load_wave_data(audio_dir, x[i])
+        if aug is not None:
+            _x = aug(x=_x, rate=rates[i])
+        _x = calculate_melsp(_x)
+        np_data[i] = _x
+        np_targets[i] = y[i]
+    np.savez(filename, x=np_data, y=np_targets)
+
+
 def main():
     print(esc_dir)
     print(meta_file)
@@ -111,3 +129,64 @@ def main():
         x_st.shape, melsp.shape, fs))
     show_wave(x_st)
     show_melsp(melsp, fs)
+
+    # get training dataset and target dataset
+    x = list(meta_data.loc[:, "filename"])
+    y = list(meta_data.loc[:, "target"])
+
+    x_train, x_test, y_train, y_test = model_selection.train_test_split(
+        x, y, test_size=0.25, stratify=y)
+    print("x train:{0}\ny train:{1}\nx test:{2}\ny test:{3}".format(len(x_train),
+                                                                    len(y_train),
+                                                                    len(x_test),
+                                                                    len(y_test)))
+
+    # showing the classes are equally splitted
+    a = np.zeros(50)
+    for c in y_test:
+        a[c] += 1
+    print(a)
+
+    # save test dataset
+    if not os.path.exists("esc_melsp_test.npz"):
+        save_np_data("esc_melsp_test.npz", x_test, y_test)
+
+    # save raw training dataset
+    if not os.path.exists("esc_melsp_train_raw.npz"):
+        save_np_data("esc_melsp_train_raw.npz", x_train, y_train)
+
+    # save training dataset with white noise
+    if not os.path.exists("esc_melsp_train_wn.npz"):
+        rates = np.random.randint(1, 50, len(x_train)) / 10000
+        save_np_data("esc_melsp_train_wn.npz", x_train,
+                     y_train, aug=add_white_noise, rates=rates)
+
+    # save training dataset with sound shift
+    if not os.path.exists("esc_melsp_train_ss.npz"):
+        rates = np.random.choice(np.arange(2, 6), len(y_train))
+        save_np_data("esc_melsp_train_ss.npz", x_train,
+                     y_train, aug=shift_sound, rates=rates)
+
+    # save training dataset with stretch
+    if not os.path.exists("esc_melsp_train_st.npz"):
+        rates = np.random.choice(np.arange(80, 120), len(y_train)) / 100
+        save_np_data("esc_melsp_train_st.npz", x_train,
+                     y_train, aug=stretch_sound, rates=rates)
+
+    # save training dataset with combination of white noise and shift or stretch
+    if not os.path.exists("esc_melsp_train_com.npz"):
+        np_data = np.zeros(freq * time * len(x_train)
+                           ).reshape(len(x_train), freq, time)
+        np_targets = np.zeros(len(y_train))
+        for i in range(len(y_train)):
+            x, fs = load_wave_data(audio_dir, x_train[i])
+            x = add_white_noise(x=x, rate=np.random.randint(1, 50) / 1000)
+            if np.random.choice((True, False)):
+                x = shift_sound(x=x, rate=np.random.choice(np.arange(2, 6)))
+            else:
+                x = stretch_sound(x=x, rate=np.random.choice(
+                    np.arange(80, 120)) / 100)
+            x = calculate_melsp(x)
+            np_data[i] = x
+            np_targets[i] = y_train[i]
+        np.savez("esc_melsp_train_com.npz", x=np_data, y=np_targets)

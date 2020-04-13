@@ -20,6 +20,8 @@ time = 1723
 train_num = 1500
 test_num = 500
 
+classes = 50
+
 
 def cba(inputs, filters, kernel_size, strides):
     x = Conv2D(filters, kernel_size=kernel_size,
@@ -81,11 +83,6 @@ def main():
                        ).reshape(train_num * len(train_files), freq, time)
     y_train = np.zeros(train_num * len(train_files))
 
-    # redefine target data into one hot vector
-    classes = 50
-    #y_train = keras.utils.to_categorical(y_train, classes)
-    #y_test = keras.utils.to_categorical(y_test, classes)
-
     # load dataset
     for i in range(len(train_files)):
         data = np.load(train_files[i])
@@ -145,7 +142,7 @@ def main():
     model.summary()
 
     # initiate Adam optimizer
-    opt = keras.optimizers.adam(lr=0.00001, decay=1e-6, amsgrad=True)
+    opt = keras.optimizers.Adam(lr=0.00001, decay=1e-6, amsgrad=True)
 
     # Let's train the model using Adam with amsgrad
     model.compile(loss='categorical_crossentropy',

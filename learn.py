@@ -29,6 +29,53 @@ def cba(inputs, filters, kernel_size, strides):
     return x
 
 
+# between class data generator
+class MixupGenerator():
+    def __init__(self, x_train, y_train, batch_size=16, alpha=0.2, shuffle=True):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.batch_size = batch_size
+        self.alpha = alpha
+        self.shuffle = shuffle
+        self.sample_num = len(x_train)
+
+    def __call__(self):
+        while True:
+            indexes = self.__get_exploration_order()
+            itr_num = int(len(indexes) // (self.batch_size * 2))
+
+            for i in range(itr_num):
+                batch_ids = indexes[i * self.batch_size *
+                                    2:(i + 1) * self.batch_size * 2]
+                x, y = self.__data_generation(batch_ids)
+
+                yield x, y
+
+    def __get_exploration_order(self):
+        indexes = np.arange(self.sample_num)
+
+        if self.shuffle:
+            np.random.shuffle(indexes)
+
+        return indexes
+
+    def __data_generation(self, batch_ids):
+        _, h, w, c = self.x_train.shape
+        _, class_num = self.y_train.shape
+        x1 = self.x_train[batch_ids[:self.batch_size]]
+        x2 = self.x_train[batch_ids[self.batch_size:]]
+        y1 = self.y_train[batch_ids[:self.batch_size]]
+        y2 = self.y_train[batch_ids[self.batch_size:]]
+        l = np.random.beta(self.alpha, self.alpha, self.batch_size)
+        x_l = l.reshape(self.batch_size, 1, 1, 1)
+        y_l = l.reshape(self.batch_size, 1)
+
+        x = x1 * x_l + x2 * (1 - x_l)
+        y = y1 * y_l + y2 * (1 - y_l)
+
+        return x, y
+
+
 def main():
     x_train = np.zeros(freq*time*train_num*len(train_files)
                        ).reshape(train_num * len(train_files), freq, time)
@@ -36,8 +83,8 @@ def main():
 
     # redefine target data into one hot vector
     classes = 50
-    # y_train = keras.utils.to_categorical(y_train, classes)
-    # y_test = keras.utils.to_categorical(y_test, classes)
+    #y_train = keras.utils.to_categorical(y_train, classes)
+    #y_test = keras.utils.to_categorical(y_test, classes)
 
     # load dataset
     for i in range(len(train_files)):
@@ -96,3 +143,37 @@ def main():
 
     model = Model(inputs, x)
     model.summary()
+
+    # initiate Adam optimizer
+    opt = keras.optimizers.adam(lr=0.00001, decay=1e-6, amsgrad=True)
+
+    # Let's train the model using Adam with amsgrad
+    model.compile(loss='categorical_crossentropy',
+                  optimizer=opt,
+                  metrics=['accuracy'])
+
+    # directory for model checkpoints
+    model_dir = "./models"
+    if not os.path.exists(model_dir):
+        os.mkdir(model_dir)
+
+    # early stopping and model checkpoint# early
+    es_cb = EarlyStopping(monitor='val_loss', patience=10,
+                          verbose=1, mode='auto')
+    chkpt = os.path.join(
+        model_dir, 'esc50_.{epoch:02d}_{val_loss:.4f}_{val_acc:.4f}.hdf5')
+    cp_cb = ModelCheckpoint(filepath=chkpt, monitor='val_loss',
+                            verbose=1, save_best_only=True, mode='auto')
+
+    # train model
+    batch_size = 16
+    epochs = 1000
+
+    training_generator = MixupGenerator(x_train, y_train)()
+    model.fit_generator(generator=training_generator,
+                        steps_per_epoch=x_train.shape[0] // batch_size,
+                        validation_data=(x_test, y_test),
+                        epochs=epochs,
+                        verbose=1,
+                        shuffle=True,
+                        callbacks=[es_cb, cp_cb])
